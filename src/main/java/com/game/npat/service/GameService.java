@@ -2,6 +2,7 @@ package com.game.npat.service;
 
 import com.game.npat.model.GameRoom;
 import com.game.npat.model.Player;
+import com.game.npat.model.ScoringAssignment;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -26,8 +27,8 @@ public class GameService {
 
     private final Map<String, GameRoom> rooms = new ConcurrentHashMap<>();
     private final List<String> availableLetters = Arrays.asList(
-        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
-        "N", "O", "P", "R", "S", "T", "U", "V", "W", "Y"
+            "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
+            "N", "O", "P", "R", "S", "T", "U", "V", "W", "Y"
     );
 
     public GameRoom createRoom(String playerName, String sessionId) {
@@ -41,6 +42,7 @@ public class GameService {
                 .ready(false)
                 .submitted(false)
                 .score(0)
+                .scoringCompleted(false)
                 .sessionId(sessionId)
                 .build();
 
@@ -55,13 +57,13 @@ public class GameService {
 
         rooms.put(roomCode, room);
         log.info("Room created: {} by player: {}", roomCode, playerName);
-        
+
         return room;
     }
 
     public GameRoom joinRoom(String roomCode, String playerName, String sessionId) throws Exception {
         GameRoom room = rooms.get(roomCode.toUpperCase());
-        
+
         if (room == null) {
             throw new Exception("Room not found");
         }
@@ -82,18 +84,19 @@ public class GameService {
                 .ready(false)
                 .submitted(false)
                 .score(0)
+                .scoringCompleted(false)
                 .sessionId(sessionId)
                 .build();
 
         room.addPlayer(player);
         log.info("Player {} joined room: {}", playerName, roomCode);
-        
+
         return room;
     }
 
     public GameRoom leaveRoom(String roomCode, String playerId) throws Exception {
         GameRoom room = rooms.get(roomCode);
-        
+
         if (room == null) {
             throw new Exception("Room not found");
         }
@@ -121,7 +124,7 @@ public class GameService {
 
     public GameRoom startGame(String roomCode, String playerId) throws Exception {
         GameRoom room = rooms.get(roomCode);
-        
+
         if (room == null) {
             throw new Exception("Room not found");
         }
@@ -140,13 +143,13 @@ public class GameService {
         room.resetPlayersForNewRound();
 
         log.info("Game started in room: {} with letter: {}", roomCode, room.getLetter());
-        
+
         return room;
     }
 
     public GameRoom submitAnswers(String roomCode, String playerId, Map<String, String> answers) throws Exception {
         GameRoom room = rooms.get(roomCode);
-        
+
         if (room == null) {
             throw new Exception("Room not found");
         }
@@ -160,14 +163,143 @@ public class GameService {
         player.setSubmitted(true);
         player.setScore(calculateScore(answers, room.getLetter()));
 
-        log.info("Player {} submitted answers in room: {}, score: {}", 
-                 player.getName(), roomCode, player.getScore());
+        log.info("Player {} submitted answers in room: {}, score: {}",
+                player.getName(), roomCode, player.getScore());
 
-        // Check if all players submitted
-        if (room.allPlayersSubmitted()) {
-            room.setGameState(GameRoom.GameState.RESULTS);
-            log.info("All players submitted in room: {}", roomCode);
+        return room;
+    }
+
+    // NEW: Submit scores for peer review
+    public GameRoom submitScores(String roomCode, String playerId, Map<String, Integer> categoryScores) throws Exception {
+        GameRoom room = rooms.get(roomCode);
+
+        if (room == null) {
+            throw new Exception("Room not found");
         }
+
+        Player player = room.getPlayer(playerId);
+        if (player == null) {
+            throw new Exception("Player not found");
+        }
+
+        player.setGivenScores(categoryScores);
+        player.setScoringCompleted(true);
+
+        log.info("Player {} submitted scores in room: {}", player.getName(), roomCode);
+
+        // If all players completed scoring, calculate final scores
+        if (room.allPlayersCompletedScoring()) {
+            calculateFinalScores(room);
+            room.setGameState(GameRoom.GameState.RESULTS);
+            log.info("All players completed scoring in room: {}, moving to results", roomCode);
+        }
+
+        return room;
+    }
+
+    // NEW: Calculate final scores from peer review
+    private void calculateFinalScores(GameRoom room) {
+        // Each player has given scores to another player
+        // We need to apply those scores to the target players
+
+        Map<String, ScoringAssignment> assignments = assignScoring(room);
+
+        for (Player scorer : room.getPlayers()) {
+            if (scorer.getGivenScores() != null) {
+                ScoringAssignment assignment = assignments.get(scorer.getId());
+                Player targetPlayer = room.getPlayer(assignment.getTargetPlayerId());
+
+                if (targetPlayer != null) {
+                    // Sum up the scores given by the scorer
+                    int totalScore = scorer.getGivenScores().values().stream()
+                            .mapToInt(Integer::intValue)
+                            .sum();
+
+                    targetPlayer.setFinalScore(totalScore);
+                    targetPlayer.setScore(totalScore); // Update main score field
+                }
+            }
+        }
+
+        log.info("Final scores calculated for room: {}", room.getCode());
+    }
+
+    // NEW: Find duplicate answers
+    public Map<String, Map<String, List<String>>> findDuplicates(GameRoom room) {
+        Map<String, Map<String, List<String>>> duplicates = new HashMap<>();
+        String[] categories = {"Name", "Place", "Animal", "Thing"};
+
+        for (String category : categories) {
+            Map<String, List<String>> categoryDuplicates = new HashMap<>();
+
+            // Group players by their answers in this category
+            Map<String, List<String>> answerToPlayers = new HashMap<>();
+
+            for (Player player : room.getPlayers()) {
+                if (player.getAnswers() != null) {
+                    String answer = player.getAnswers().get(category);
+                    if (answer != null && !answer.trim().isEmpty()) {
+                        String normalized = answer.trim().toLowerCase();
+                        answerToPlayers.computeIfAbsent(normalized, k -> new ArrayList<>())
+                                .add(player.getId());
+                    }
+                }
+            }
+
+            // Find duplicates (answers given by multiple players)
+            for (Map.Entry<String, List<String>> entry : answerToPlayers.entrySet()) {
+                if (entry.getValue().size() > 1) {
+                    categoryDuplicates.put(entry.getKey(), entry.getValue());
+                }
+            }
+
+            duplicates.put(category, categoryDuplicates);
+        }
+
+        return duplicates;
+    }
+
+    // NEW: Assign who scores whom (circular peer review)
+    public Map<String, ScoringAssignment> assignScoring(GameRoom room) {
+        Map<String, ScoringAssignment> assignments = new HashMap<>();
+        List<Player> players = room.getPlayers();
+
+        for (int i = 0; i < players.size(); i++) {
+            Player scorer = players.get(i);
+            Player target = players.get((i + 1) % players.size()); // Circular assignment
+
+            ScoringAssignment assignment = ScoringAssignment.builder()
+                    .targetPlayerId(target.getId())
+                    .targetPlayerName(target.getName())
+                    .targetAnswers(target.getAnswers())
+                    .scorerAnswers(scorer.getAnswers())
+                    .build();
+
+            assignments.put(scorer.getId(), assignment);
+        }
+
+        return assignments;
+    }
+
+    // NEW: Reset game for play again
+    public GameRoom resetGame(String roomCode, String playerId) throws Exception {
+        GameRoom room = rooms.get(roomCode);
+
+        if (room == null) {
+            throw new Exception("Room not found");
+        }
+
+        if (!playerId.equals(room.getHostId())) {
+            throw new Exception("Only host can start a new game");
+        }
+
+        // Reset game state
+        room.setGameState(GameRoom.GameState.PLAYING);
+        room.setLetter(getRandomLetter());
+        room.setStartTime(LocalDateTime.now());
+        room.resetPlayersForNewRound();
+
+        log.info("Game reset in room: {} with new letter: {}", roomCode, room.getLetter());
 
         return room;
     }

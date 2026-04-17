@@ -22,27 +22,28 @@ public class GameRoom {
     private LocalDateTime startTime;
     private LocalDateTime createdAt;
     private int timerDuration;
-    
+
     public enum GameState {
         LOBBY,
         PLAYING,
+        SCORING,    // NEW: For peer scoring phase
         RESULTS,
         FINISHED
     }
-    
+
     public void addPlayer(Player player) {
         if (this.players == null) {
             this.players = new ArrayList<>();
         }
         this.players.add(player);
     }
-    
+
     public void removePlayer(String playerId) {
         if (this.players != null) {
             this.players.removeIf(p -> p.getId().equals(playerId));
         }
     }
-    
+
     public Player getPlayer(String playerId) {
         if (this.players == null) return null;
         return this.players.stream()
@@ -50,12 +51,18 @@ public class GameRoom {
                 .findFirst()
                 .orElse(null);
     }
-    
+
     public boolean allPlayersSubmitted() {
         if (this.players == null || this.players.isEmpty()) return false;
         return this.players.stream().allMatch(Player::isSubmitted);
     }
-    
+
+    // NEW: Check if all players completed scoring
+    public boolean allPlayersCompletedScoring() {
+        if (this.players == null || this.players.isEmpty()) return false;
+        return this.players.stream().allMatch(Player::isScoringCompleted);
+    }
+
     public void resetPlayersForNewRound() {
         if (this.players != null) {
             this.players.forEach(Player::resetForNewRound);

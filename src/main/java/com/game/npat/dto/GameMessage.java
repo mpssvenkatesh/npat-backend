@@ -17,8 +17,9 @@ public class GameMessage {
     private String playerId;
     private String playerName;
     private Map<String, String> answers;
+    private Map<String, Integer> categoryScores;  // NEW: For scoring phase
     private Object data;
-    
+
     public enum MessageType {
         // Client -> Server
         CREATE_ROOM,
@@ -26,8 +27,10 @@ public class GameMessage {
         LEAVE_ROOM,
         START_GAME,
         SUBMIT_ANSWERS,
+        SUBMIT_SCORES,      // NEW
+        PLAY_AGAIN,         // NEW
         READY,
-        
+
         // Server -> Client
         ROOM_CREATED,
         ROOM_JOINED,
@@ -35,6 +38,8 @@ public class GameMessage {
         PLAYER_LEFT,
         GAME_STARTED,
         GAME_UPDATE,
+        SCORING_PHASE,      // NEW
+        SCORING_UPDATE,     // NEW
         RESULTS_READY,
         ERROR
     }
