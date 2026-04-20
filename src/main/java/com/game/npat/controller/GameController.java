@@ -139,7 +139,7 @@ public class GameController {
 
         } catch (Exception e) {
             log.error("Error starting game", e);
-            sendError(message.getPlayerId(), e.getMessage());
+            sendErrorToPlayer(message.getRoomCode(), message.getPlayerId(), e.getMessage());
         }
     }
 
@@ -202,7 +202,7 @@ public class GameController {
 
         } catch (Exception e) {
             log.error("Error submitting answers", e);
-            sendError(message.getPlayerId(), e.getMessage());
+            sendErrorToPlayer(message.getRoomCode(), message.getPlayerId(), e.getMessage());
         }
     }
 
@@ -249,7 +249,7 @@ public class GameController {
 
         } catch (Exception e) {
             log.error("Error submitting scores", e);
-            sendError(message.getPlayerId(), e.getMessage());
+            sendErrorToPlayer(message.getRoomCode(), message.getPlayerId(), e.getMessage());
         }
     }
 
@@ -272,7 +272,7 @@ public class GameController {
 
         } catch (Exception e) {
             log.error("Error in play again", e);
-            sendError(message.getPlayerId(), e.getMessage());
+            sendErrorToPlayer(message.getRoomCode(), message.getPlayerId(), e.getMessage());
         }
     }
 
@@ -291,6 +291,22 @@ public class GameController {
                 "/queue/messages",
                 errorMsg
         );
+    }
+
+    private void sendErrorToPlayer(String roomCode, String playerId, String errorMessage) {
+        GameRoom room = gameService.getRoom(roomCode);
+        if (room == null) {
+            log.warn("Unable to send player-targeted error. Room not found: {}, player: {}", roomCode, playerId);
+            return;
+        }
+
+        Player player = room.getPlayer(playerId);
+        if (player == null || player.getSessionId() == null) {
+            log.warn("Unable to send player-targeted error. Player/session not found in room: {}, player: {}", roomCode, playerId);
+            return;
+        }
+
+        sendError(player.getSessionId(), errorMessage);
     }
 
     private Map<String, Object> createRoomData(GameRoom room) {
