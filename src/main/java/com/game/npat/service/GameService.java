@@ -62,7 +62,7 @@ public class GameService {
     }
 
     public GameRoom joinRoom(String roomCode, String playerName, String sessionId) throws Exception {
-        GameRoom room = rooms.get(roomCode.toUpperCase());
+        GameRoom room = rooms.get(normalizeRoomCode(roomCode));
 
         if (room == null) {
             throw new Exception("Room not found");
@@ -95,7 +95,7 @@ public class GameService {
     }
 
     public GameRoom leaveRoom(String roomCode, String playerId) throws Exception {
-        GameRoom room = rooms.get(roomCode);
+        GameRoom room = rooms.get(normalizeRoomCode(roomCode));
 
         if (room == null) {
             throw new Exception("Room not found");
@@ -123,7 +123,7 @@ public class GameService {
     }
 
     public GameRoom startGame(String roomCode, String playerId) throws Exception {
-        GameRoom room = rooms.get(roomCode);
+        GameRoom room = rooms.get(normalizeRoomCode(roomCode));
 
         if (room == null) {
             throw new Exception("Room not found");
@@ -148,7 +148,7 @@ public class GameService {
     }
 
     public GameRoom submitAnswers(String roomCode, String playerId, Map<String, String> answers) throws Exception {
-        GameRoom room = rooms.get(roomCode);
+        GameRoom room = rooms.get(normalizeRoomCode(roomCode));
 
         if (room == null) {
             throw new Exception("Room not found");
@@ -171,7 +171,7 @@ public class GameService {
 
     // NEW: Submit scores for peer review
     public GameRoom submitScores(String roomCode, String playerId, Map<String, Integer> categoryScores) throws Exception {
-        GameRoom room = rooms.get(roomCode);
+        GameRoom room = rooms.get(normalizeRoomCode(roomCode));
 
         if (room == null) {
             throw new Exception("Room not found");
@@ -283,7 +283,7 @@ public class GameService {
 
     // NEW: Reset game for play again
     public GameRoom resetGame(String roomCode, String playerId) throws Exception {
-        GameRoom room = rooms.get(roomCode);
+        GameRoom room = rooms.get(normalizeRoomCode(roomCode));
 
         if (room == null) {
             throw new Exception("Room not found");
@@ -305,7 +305,7 @@ public class GameService {
     }
 
     public GameRoom getRoom(String roomCode) {
-        return rooms.get(roomCode);
+        return rooms.get(normalizeRoomCode(roomCode));
     }
 
     public List<GameRoom> getAllRooms() {
@@ -361,6 +361,10 @@ public class GameService {
     private String getRandomLetter() {
         Random random = new Random();
         return availableLetters.get(random.nextInt(availableLetters.size()));
+    }
+
+    private String normalizeRoomCode(String roomCode) {
+        return roomCode == null ? null : roomCode.trim().toUpperCase();
     }
 
     public void cleanupOldRooms(int hours) {
